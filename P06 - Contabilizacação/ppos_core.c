@@ -7,9 +7,86 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+
 // funções para corpos de tarefas =============s=================================
 
-task_t  *scheduler ()
+void setUpTimer()
+{
+    // Ajusta valores do temporizador
+    timer.it_value.tv_sec = 0;      // Primeiro disparo, em segundos
+    timer.it_value.tv_usec = 1000;      // Primeiro disparo, em micro-segundos
+    timer.it_interval.tv_sec = 0;   // Disparos subsequentes, em segundos
+    timer.it_interval.tv_usec = 1000;   // Disparos subsequentes, em micro-segundos
+
+    // Arma o temporizador ITIMER_REAL
+    if (setitimer(ITIMER_REAL, &timer, 0) < 0)
+    {
+        fprintf(stderr, "setUpTimer - ERRO em iniciar o temporizador\n");
+        exit(ERRTIMER);
+    }
+    //DEBUGGER
+    #ifdef DEBUG
+        printf("setUpHandler: Tratador de sinal iniciado\n");
+    #endif
+}
+
+void timerHandler()
+{
+    // DEBUGGER
+    #ifdef DEBUG
+        printf("timerHandler: Entrando no Timer Handler\n");
+    #endif
+
+    // Incrementa o tempo do sistema
+    systemTime++;
+
+    // Se a tarefa atual for uma tarefa do sistema, não decrementa o quantum
+    if(taskActual->isSystemTask == 1)
+    {
+        #ifdef DEBUG
+            printf("timerHandler: tarefa id: %d ===> Tarefa do Sistema\n", taskActual->id);
+        #endif
+        return; 
+    }
+
+    // Decrementa o quantum da tarefa atual
+    taskActual->quantum--;
+    // DEBBUGER
+    #ifdef DEBUG
+        printf("timerHandler: tarefa id: %d ===> Quantum: %d\n", taskActual->id, taskActual->quantum);
+    #endif
+
+    // Se o quantum da tarefa atual for 0, a tarefa é colocada no final da fila de prontas
+    if(taskActual->quantum == 0)
+    {
+        #ifdef DEBUG
+            printf("timerHandler: tarefa id: %d ===> Fim do Quantum\n", taskActual->id);
+            printf("timerHandler: tarefa id: %d ===> Fila de tarefas prontas\n", taskActual->id);
+        #endif
+        task_yield(); // Retorna a execução para o Dispatcher
+    }
+    
+}
+
+void setUpHandler()
+{
+    // Registra a ação para o sinal de timer SIGALRM (sinal do timer)
+    action.sa_handler = timerHandler;
+    sigemptyset(&action.sa_mask);
+    action.sa_flags = 0;
+    if (sigaction(SIGALRM, &action, 0) < 0)
+    {
+        fprintf(stderr, "setUpHandler - Erro em iniciar o tratador de sinal\n");
+        exit(ERRHANDLER);
+    }
+    
+    //DEBUGGER
+    #ifdef DEBUG
+        printf("setUpHandler: Tratador de sinal iniciado\n");
+    #endif
+}
+
+task_t* scheduler()
 {
     #ifdef DEBUG
         printf("scheduler: Entrando no Scheduler\n");
@@ -75,15 +152,18 @@ void dispatcherBody (void* arg)
             printf("dispatcherBody: Dispatcher em execução\n");
             printf("dispatcherBody: %d tarefas prontas\n", userTasks);
         #endif
+        unsigned int timeBefore, timeAfter;
         task_t* taskNext = scheduler(); // próxima tarefa a ser executada
         if (taskNext != NULL) 
         {
             queue_remove((queue_t**)&readyTasksQueue, (queue_t*)taskNext); // remove tarefa da fila de prontas
             taskNext->status = EXECUTANDO; // seta o status da tarefa como rodando
-            timeBefore = timeActual // tempo antes da execução
+            taskNext->quantum = QTDTICKS; // seta o quantum da tarefa
+            timeBefore = systime();
             task_switch(taskNext); // transfere o contexto para a próxima tarefa selecionada
-            timeAfter = timeActual;
-            timeActual = timeAfter - timeBefore; // tempo de execução
+            timeAfter = systime();
+            taskNext->procTime += timeAfter - timeBefore;
+
             switch (taskNext->status)
             {
             case PRONTA:
@@ -93,7 +173,6 @@ void dispatcherBody (void* arg)
                 #endif
                 break;
             case ENCERRADA:
-                printf("Task %d exit: execution time %d ms, processor time %d ms, %d activations\n", taskNext->id, timeActual, taskNext->processor_time, taskNext->activations);
                 free(taskNext->context.uc_stack.ss_sp);
                 #ifdef DEBUG
                     printf("dispatcherBody: tarefa id: %d encerrada\n", taskNext->id);
@@ -110,7 +189,6 @@ void dispatcherBody (void* arg)
 
 // funções gerais ==============================================================
 
-
 // Inicializa o sistema operacional; deve ser chamada no inicio do main()
 void ppos_init ()
 {
@@ -122,15 +200,22 @@ void ppos_init ()
     taskMain.status = EXECUTANDO; // Seta o status da tarefa Main como rodando
     taskMain.prev = NULL; // Seta o valor do ponteiro anterior da tarefa Main para ela mesma
     taskMain.next = NULL; // Seta o valor do ponteiro próximo da tarefa Main para ela mesma
+    taskMain.execTime = systime(); // Tempo de execução
+    taskMain.procTime = 0; // Tempo de processador
+    taskMain.actvs = 1; // Número de ativações
     taskActual = &taskMain; // tarefa atual aponta para a tarefa Main
-
-    timeActual = 0; // Tempo atual do sistema
-
     #ifdef DEBUG
         printf ("tarefa Main id => 0\n");
     #endif
 
+    // Inicializa o tempo do sistema e o temporizador
+    systemTime = 0;
+    setUpTimer();
+    setUpHandler();
+
+    // Cria a tarefa Dispatcher
     task_init(&taskDispatcher, (void *)dispatcherBody, NULL);
+    taskDispatcher.isSystemTask = 1; // Seta a tarefa Dispatcher como tarefa do sistema
     #ifdef DEBUG
         printf ("tarefa Dispatcher id => 1\n");
         printf ("ppos_init: PingPongOS inicializado, tarefa Main e tarefa Dispatcher criadas!\n");
@@ -162,13 +247,17 @@ int task_init (task_t *task, void  (*start_func)(void *), void *arg)
     // Inicializa o contexto da tarefa    
     task->context.uc_stack.ss_sp = stack; // Stack Pointer
     task->context.uc_stack.ss_size = STACKSIZE; // Tamanho da pilha
-    task->context.uc_stack.ss_flags = 0; // zero indica que a pilha deve crescer para baixo
-    task->context.uc_link = 0; // contexto de retorno
-    task->status = PRONTA;
+    task->context.uc_stack.ss_flags = 0; // Zero indica que a pilha deve crescer para baixo
+    task->context.uc_link = 0; // Contexto de retorno
+    task->status = PRONTA; // Tarefa pronta para execução
     lastTaskId++;
     task->id = lastTaskId; // Define ID da tarefa
-    task->static_prio = 0;
-    task->dynamic_prio = 0;
+    task->static_prio = 0; // Prioridade estática
+    task->dynamic_prio = 0; // Prioridade dinâmica
+    task->isSystemTask = 0; // Tarefa do usuário
+    task->actvs = 0; // Número de ativações
+    task->procTime = 0; // Tempo de processador
+    task->execTime = systime(); // Tempo de execução
 
     // Cria o contexto da tarefa
     makecontext(&(task->context), (void *)start_func, 1, arg); 
@@ -202,6 +291,9 @@ int task_id ()
 void task_exit (int exit_code)
 {
 
+    // Atualiza o tempo de execução da tarefa
+    taskActual->execTime = systime() - taskActual->execTime;
+
     taskActual->status = ENCERRADA;
     // Retorna a execução para o Dispatcher, se o despacher for encerrado, retorna para a tarefa Main
     if(taskActual == &taskDispatcher)
@@ -210,6 +302,7 @@ void task_exit (int exit_code)
         printf ("task_exit: dispatcher encerrando\n");
         #endif
         free(taskActual->context.uc_stack.ss_sp); // Libera a pilha do dispatcher
+        printf("Task %d exit: execution time %d ms, processor time %d ms, %d activations\n", taskActual->id, taskActual->execTime, taskActual->procTime, taskActual->actvs);
         exit(0);
     }
     else
@@ -218,7 +311,8 @@ void task_exit (int exit_code)
         printf ("task_exit: encerrada tarefa id: %d\n", taskActual->id);
         printf ("task_exit: retornando a tarefa dispatcher\n");
         #endif
-        task_switch(&taskDispatcher);
+        printf("Task %d exit: execution time %d ms, processor time %d ms, %d activations\n", taskActual->id, taskActual->execTime, taskActual->procTime, taskActual->actvs);
+        task_switch(&taskDispatcher); // Retorna a execução para o Dispatcher
     }
 }
 
@@ -231,7 +325,7 @@ int task_switch (task_t *task)
         fprintf(stderr,"Erro ao alterar a tarefa atual");
         exit(ERRSWITCH);
     }
-
+    
     // Troca de contexto
     task_t *taskToSwitch = taskActual;
     taskActual = task;
@@ -239,6 +333,8 @@ int task_switch (task_t *task)
     #ifdef DEBUG
         printf ("task_switch: trocou a tarefa atual id:%d ===> id: %d\n", taskToSwitch->id, task->id);
     #endif
+    // Incrementa o número de ativações da tarefa
+    taskActual->actvs++;
     swapcontext(&(taskToSwitch->context), &(taskActual->context));
 
     // Sucesso na troca
@@ -329,7 +425,10 @@ int task_getprio (task_t *task)
 // operações de gestão do tempo ================================================
 
 // retorna o relógio atual (em milisegundos)
-unsigned int systime () ;
+unsigned int systime ()
+{
+    return systemTime;
+}
 
 // suspende a tarefa corrente por t milissegundos
 void task_sleep (int t) ;

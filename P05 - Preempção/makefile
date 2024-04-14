@@ -1,7 +1,7 @@
-OBJS	= ppos_core.o queue.o preempcao-stress.o
-SOURCE	= ppos_core.c queue.c preempcao-stress.c
+OBJS	= ppos_core.o queue.o preempcao.o
+SOURCE	= ppos_core.c queue.c preempcao.c
 HEADER	= ppos_data.h ppos.h queue.h
-OUT	= preempcao-stress
+OUT	= preempcao
 CC	 = gcc
 FLAGS	 = -g -c -Wall
 DEBUG =
@@ -17,8 +17,8 @@ ppos_core.o: ppos_core.c
 queue.o: queue.c
 	$(CC) $(FLAGS) $(DEBUG) queue.c 
 
-preempcao-stress.o: preempcao-stress.c
-	$(CC) $(FLAGS) preempcao-stress.c
+preempcao.o: preempcao.c
+	$(CC) $(FLAGS) preempcao.c
 
 # Ativa flag de Debug
 debug: all
@@ -29,7 +29,7 @@ debug: purge
 #compactar arquivos
 compact:
 	@echo "Compactando arquivos..."
-	tar -cvzf preempcao-stress_lcmc20.tar.gz $(SOURCE) $(HEADER) makefile README.md
+	tar -cvzf preempcao_lcmc20.tar.gz $(SOURCE) $(HEADER) makefile README.md
 
 # Remove arquivos temporarios
 clean:
