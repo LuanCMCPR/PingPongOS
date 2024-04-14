@@ -1,0 +1,1 @@
+$ cc -Wextra ppos_core.c pingpong-tasks1.c

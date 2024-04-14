@@ -1,0 +1,162 @@
+
+1.Explique o objetivo e os parâmetros de cada uma das quatro funções acima.
+
+getcontext(ucontext_t &a)
+Objetvo: Guardar as informações do estado interno de uma tarefa (contexto atual) em uma variável da struct do tipo ucontext_t
+Paramêtros: Struct ucontext_t
+
+setcontext(ucontext_t &a)
+Objetvo:
+Paramêtros: Struct ucontext_t
+
+swapcontext(ucontext_t &a, ucontext_t &b)
+Objetvo:
+Paramêtros: 2 Struct ucontext_t a do contexto atual (a) e a do contexto para qual será trocado (b) 
+
+makecontext(ucontext_t &a, …)
+Objetvo:
+Paramêtros:
+
+
+2.Explique o significado dos campos da estrutura ucontext_t que foram utilizados no código. 
+
+unsigned long 	uc_flags
+struct ucontext * 	uc_link
+old_sigset_t 	uc_osf_sigmask
+stack_t 	uc_stack
+struct sigcontext 	uc_mcontext
+sigset_t 	uc_sigmask
+int 	__unused [32-(sizeof(sigset_t)/sizeof(int))]
+__u8 	__unused [(1024-sizeof(sigset_t))/8]
+struct mcontext 	uc_mcontext
+unsigned long 	uc_filler [80]
+unsigned int 	uc_flags
+struct ucontext __user * 	uc_link
+int 	uc_pad [7]
+struct mcontext __user * 	uc_regs
+int 	uc_maskext [30]
+int 	uc_pad2 [3]
+_sigregs 	uc_mcontext
+mcontext_t 	uc_mcontext
+
+A struct ucontext_t possui vários campos de dados, os que foram utilizados no código de contexts.c são os seguintes:
+
+stackt_t uc_stack, 
+struct context_t user* uc_link
+
+
+3.Explique cada linha do código de contexts.c que chame uma dessas funções ou que manipule estruturas do tipo ucontext_t.
+
+
+// PingPongOS - PingPong Operating System
+// Prof. Carlos A. Maziero, DINF UFPR
+// Versão 1.4 -- Janeiro de 2022
+
+// Demonstração das funções POSIX de troca de contexto (ucontext.h).
+
+// operating system check
+
+#if defined(_WIN32) || (!defined(__unix__) && !defined(__unix) && (!defined(__APPLE__) || !defined(__MACH__)))
+#warning Este codigo foi planejado para ambientes UNIX (LInux, *BSD, MacOS). A compilacao e execucao em outros ambientes e responsabilidade do usuario.
+#endif
+
+#define _XOPEN_SOURCE 600	/* para compilar no MacOS */
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <ucontext.h>
+
+#define STACKSIZE 64*1024	/* tamanho de pilha das threads */
+
+ucontext_t ContextPing, ContextPong, ContextMain ;
+
+/*****************************************************/
+
+void BodyPing (void * arg)
+{
+   int i ;
+
+   printf ("%s: inicio\n", (char *) arg) ;
+
+   for (i=0; i<4; i++)
+   {
+      printf ("%s: %d\n", (char *) arg, i) ;
+      swapcontext (&ContextPing, &ContextPong) // Faz a troca de contexto de Ping para Pong;
+   }
+   printf ("%s: fim\n", (char *) arg) ;
+
+   swapcontext (&ContextPing, &ContextMain) // Faz a troca de contexto de Ping para Main;
+}
+
+/*****************************************************/
+
+void BodyPong (void * arg)
+{
+   int i ;
+
+   printf ("%s: inicio\n", (char *) arg) ;
+
+   for (i=0; i<4; i++)
+   {
+      printf ("%s: %d\n", (char *) arg, i) ;
+      swapcontext (&ContextPong, &ContextPing) // Faz a troca de contexto de Pong para Ping;
+   }
+   printf ("%s: fim\n", (char *) arg) ;
+
+   swapcontext (&ContextPong, &ContextMain) // Faz a troca de contexto de Pong para Main;
+}
+
+/*****************************************************/
+
+int main (int argc, char *argv[])
+{
+   char *stack ;
+
+   printf ("main: inicio\n") ;
+
+   getcontext (&ContextPing) // Guarda o contexto atual na variável ContextPing;
+
+   stack = malloc (STACKSIZE) ;
+   if (stack)
+   {
+      ContextPing.uc_stack.ss_sp = stack // ponteiro do endereço do início da pilha
+      ContextPing.uc_stack.ss_size = STACKSIZE // tamanho da pilha em bytes
+      ContextPing.uc_stack.ss_flags = 0 // flags de controle da pilha
+      ContextPing.uc_link = 0 // contexto a ser retomado quando o corrente terminar, possibilitanto que o processos sejam encadeados
+   }
+   else
+   {
+      perror ("Erro na criação da pilha: ") ;
+      exit (1) ;
+   }
+
+   makecontext (&ContextPing, (void*)(*BodyPing), 1, "    Ping") // Cria um novo contexto com a função BodyPing e o argumento "Ping";
+
+   getcontext (&ContextPong) // Guarda o contexto atual na variável ContextPong;
+
+   stack = malloc (STACKSIZE) ;
+   if (stack)
+   {
+      ContextPong.uc_stack.ss_sp = stack // ponteiro do endereço do início da pilha
+      ContextPong.uc_stack.ss_size = STACKSIZE  // tamanho da pilha em bytes
+      ContextPong.uc_stack.ss_flags = 0 // flags de controle da pilha
+      ContextPong.uc_link = 0 // contexto a ser retomado quando o corrente terminar, possibilitanto que o processos sejam encadeados
+   }
+   else
+   {
+      perror ("Erro na criação da pilha: ") ;
+      exit (1) ;
+   }
+
+   makecontext (&ContextPong, (void*)(*BodyPong), 1, "        Pong") // Cria um novo contexto com a função BodyPong e o argumento "Pong";
+
+   swapcontext (&ContextMain, &ContextPing) // Faz a troca de contexto de Main para Ping;
+   swapcontext (&ContextMain, &ContextPong) // Faz a troca de contexto de Main para Pong;
+
+   printf ("main: fim\n") ;
+
+   exit (0) ;
+}
+
+
+

@@ -1,0 +1,10 @@
+{
+    "makefile.launchConfigurations": [
+        {
+            "cwd": "/home/bender/Documents/UFPR/Disciplinas/5º Período/CI1215 - Sistemas Operacionais/Trabalhos/Dispatcher",
+            "binaryPath": "/home/bender/Documents/UFPR/Disciplinas/5º Período/CI1215 - Sistemas Operacionais/Trabalhos/Dispatcher/dispatcher",
+            "binaryArgs": []
+        }
+    ],
+    "makefile.makePath": ""
+}
