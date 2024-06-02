@@ -1,5 +1,5 @@
-OBJS	= ppos_core.o queue.o testes/Teste_2.o
-SOURCE	= ppos_core.c queue.c testes/Teste_2.c
+OBJS	= ppos_core.o queue.o testes/pingpong-semaphore.o
+SOURCE	= ppos_core.c queue.c testes/pingpong-semaphore.c
 HEADER	= ppos_data.h ppos.h queue.h
 OUT	= teste
 CC	 = gcc
@@ -17,8 +17,8 @@ ppos_core.o: ppos_core.c
 queue.o: queue.c
 	$(CC) $(FLAGS) $(DEBUG) queue.c 
 
-Teste_2.o: /testes/Teste_2.c 
-	$(CC) $(FLAGS) /testes/Teste_2.c
+pingpong-semaphore.o: /testes/pingpong-semaphore.c 
+	$(CC) $(FLAGS) /testes/pingpong-semaphore.c
 
 # Ativa flag de Debug
 debug: all

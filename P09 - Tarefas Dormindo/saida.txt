@@ -1,0 +1,12 @@
+    0 ms: main: inicio
+    0 ms: main: espera Pang...
+    0 ms:     Pang: inicio
+    0 ms:     Pang vai dormir 100 ms
+    0 ms:         Peng: inicio
+    0 ms:         Peng vai dormir 400 ms
+    0 ms:             Ping: inicio
+    0 ms:             Ping vai dormir 900 ms
+    0 ms:                 Pong: inicio
+    0 ms:                 Pong vai dormir 1900 ms
+    0 ms:                     Pung: inicio
+    0 ms:                     Pung vai dormir 800 ms

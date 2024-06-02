@@ -1,14 +1,14 @@
-OBJS	= ppos_core.o queue.o testes/Teste_2.o
-SOURCE	= ppos_core.c queue.c testes/Teste_2.c
+OBJS	= ppos_core.o queue.o testes/pingpong-mqueue.o
+SOURCE	= ppos_core.c queue.c testes/pingpong-mqueue.c
 HEADER	= ppos_data.h ppos.h queue.h
 OUT	= teste
 CC	 = gcc
-FLAGS	 = -g -c -Wall
+FLAGS	 = -g -c -Wall -lm
 DEBUG =
 
 all: $(OBJS)
 all: purge
-	$(CC) -g $(OBJS) -o $(OUT) 
+	$(CC) -g $(OBJS) -lm -o $(OUT) 
 	@echo "Gerando executavel..."
 
 ppos_core.o: ppos_core.c
@@ -17,8 +17,8 @@ ppos_core.o: ppos_core.c
 queue.o: queue.c
 	$(CC) $(FLAGS) $(DEBUG) queue.c 
 
-Teste_2.o: /testes/Teste_2.c 
-	$(CC) $(FLAGS) /testes/Teste_2.c
+pingpong-mqueue.o: /testes/pingpong-mqueue.c 
+	$(CC) $(FLAGS) /testes/pingpong-mqueue.c
 
 # Ativa flag de Debug
 debug: all
